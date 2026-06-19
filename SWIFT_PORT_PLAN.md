@@ -61,10 +61,20 @@ Upstream supports this directly — no source hacks needed to go headless:
       old from-scratch reimpl) — incl. DXF import, projection(), text(), MCAD +
       search(), surface() images, and the logo cases that used to time out
       (now 7.4k / 14.4k tris). Run with `OPENSCADPATH=<repo>/libraries`.
-- [ ] **Phase 5 — Apple/iOS.** CMake iOS-toolchain build → `.xcframework`;
-      consumed by the same Swift package via a binary target. (CGAL needs
-      GMP/MPFR cross-compiled for iOS — heavier; done on the Mac.) Turnkey
-      scripts + docs delivered for Martin to run on macOS.
+- [~] **Phase 5 — Apple/iOS.** 🚧 SCAFFOLDED 2026-06-19 (build runs on Mac, not
+      this Linux host). Delivered: `cmake/ios/ios.toolchain.cmake` (leetal,
+      BSD-3); `scripts/macos/build-macos.sh` (brew + cmake — the recommended
+      *first* step, gets the kernel + Swift package running on macOS with no
+      cross-compile); `Package.swift` made macOS/Linux conditional (libc++/brew
+      vs libstdc++/`--start-group`); `scripts/ios/build-ios-deps.sh` (GMP/MPFR
+      cross-compile, `--disable-assembly`); `scripts/ios/build-ios-kernel.sh`
+      (per-slice CMake, device=OS64/sim=SIMULATORARM64); `scripts/ios/make-xcframework.sh`;
+      `docs/IOS_BUILD.md` (full dependency table + steps + binaryTarget wiring).
+      **Open decision (in the guide §2): route A "slim iOS core"** (patch CMake
+      to drop text/import/2D-export → no glib/fontconfig/cairo; keep full 3D CSG
+      + minkowski + STL) **vs route B full parity** (cross-compile glib +
+      fontconfig + CoreText font shim). Remaining: cross-compile the rest of the
+      deps for iOS and build the xcframework on the Mac.
 
 ## Linux build dependencies (headless, no Qt/GL)
 Derived from `scripts/uni-get-dependencies.sh`, minus Qt/OpenGL/X:

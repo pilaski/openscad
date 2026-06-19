@@ -91,3 +91,13 @@ Manifold + Clipper2 come from in-tree submodules (already checked out).
 - 2026-06-19: Branch `swift-wrapper` created off upstream master
   (`openscad-2019.05-3946-g0a66508c6`, manifold v3.5.1). cmake 4.3.2 + ninja in
   workspace venv. Waiting on system deps to start Phase 1 build.
+- 2026-06-19 (session): **Phases 1–4 complete + Phase 5 scaffolded.** Real
+  OpenSCAD builds headless (CGAL+Manifold, `-O1 -j2` — `-j4` OOMs on the 7.7 GB
+  host) and renders `scad→stl`. Pure-C ABI (`src/swift/openscad_kernel.*`) +
+  CMake targets `openscad_kernel`/`scad2stl_c`. SwiftPM package (`swift/`) with
+  `OpenSCADKernel` facade + `scad2stl` CLI; 4 XCTests pass; output byte-identical
+  to the stock binary. **Validation: 50/50 official examples render** (old
+  reimpl: 33/50). Phase 5 prep: macOS build script, cross-platform `Package.swift`,
+  vendored iOS toolchain, GMP/MPFR + per-slice + xcframework scripts, `docs/IOS_BUILD.md`.
+  All pushed to `pilaski/openscad` (`swift-wrapper`, HEAD `d460f22`).
+  **Next decision (IOS_BUILD.md §2): slim iOS core (route A) vs full parity (B).**

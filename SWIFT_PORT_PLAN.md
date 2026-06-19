@@ -28,9 +28,12 @@ Upstream supports this directly — no source hacks needed to go headless:
 ```
 
 ## Phases
-- [ ] **Phase 1 — Compile upstream OpenSCAD headless on Linux.** Prove the real
-      kernel builds and renders `scad → stl` via the stock `openscad -o out.stl
-      in.scad` CLI. This is the foundation; everything else sits on it.
+- [x] **Phase 1 — Compile upstream OpenSCAD headless on Linux.** ✅ DONE
+      2026-06-19. Real kernel builds (`-O1 -j2`, ~13 min, 14.6 MB `build/openscad`)
+      and renders `scad → stl`: difference (Manifold) 272 facets genus-1 NoError;
+      `minkowski()` via `--backend=CGAL` 140 tris — confirms *full* CGAL geometry,
+      not just the Manifold subset. Note: `-j4` OOM-kills on this 7.7 GB host;
+      use `-j2` (or `-j1`). Build via `./build-headless.sh [jobs]`.
 - [ ] **Phase 2 — Carve out a library + C ABI.** OpenSCAD is built as an
       executable, not a lib. Add a static-lib target exposing a small pure-C ABI
       (`openscad_kernel.h`): evaluate a `.scad` string/file → geometry → STL

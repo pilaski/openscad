@@ -56,8 +56,11 @@ Upstream supports this directly — no source hacks needed to go headless:
       in the package (`Sources/scad2stl`): `scad2stl <in.scad> <out> [--fn N]
       [--ascii]`, format inferred from extension. Output **byte-identical** to the
       C harness and the stock `openscad` binary (272-tri difference, 140-tri
-      minkowski). Build/run docs in `swift/README.md`. *TODO (next): run against
-      the MiniCAD 50-example harness to quantify coverage vs the old reimpl.*
+      minkowski). Build/run docs in `swift/README.md`. **Validation: 50/50
+      official OpenSCAD examples render to valid non-empty STL** (vs 33/50 for the
+      old from-scratch reimpl) — incl. DXF import, projection(), text(), MCAD +
+      search(), surface() images, and the logo cases that used to time out
+      (now 7.4k / 14.4k tris). Run with `OPENSCADPATH=<repo>/libraries`.
 - [ ] **Phase 5 — Apple/iOS.** CMake iOS-toolchain build → `.xcframework`;
       consumed by the same Swift package via a binary target. (CGAL needs
       GMP/MPFR cross-compiled for iOS — heavier; done on the Mac.) Turnkey

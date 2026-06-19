@@ -34,11 +34,15 @@ Upstream supports this directly — no source hacks needed to go headless:
       `minkowski()` via `--backend=CGAL` 140 tris — confirms *full* CGAL geometry,
       not just the Manifold subset. Note: `-j4` OOM-kills on this 7.7 GB host;
       use `-j2` (or `-j1`). Build via `./build-headless.sh [jobs]`.
-- [ ] **Phase 2 — Carve out a library + C ABI.** OpenSCAD is built as an
-      executable, not a lib. Add a static-lib target exposing a small pure-C ABI
-      (`openscad_kernel.h`): evaluate a `.scad` string/file → geometry → STL
-      bytes, with structured error + cancellation. Reuse the frozen ABI shape
-      from the earlier MiniCAD plan so it's a backend swap, not a redesign.
+- [x] **Phase 2 — Carve out a library + C ABI.** ✅ DONE 2026-06-19. Added
+      `src/swift/include/openscad_kernel.h` (pure-C ABI), `src/swift/openscad_kernel.cpp`
+      (wraps the real `parse → instantiate → GeometryEvaluator → export_*`
+      pipeline), and CMake targets `openscad_kernel` (static lib linking
+      `OpenSCADLibInternal`+`svg`) and `scad2stl_c` (C harness). ABI: `osk_init`,
+      `osk_render_string` (→ in-memory buffer), `osk_render_file`, `osk_backend`,
+      buffer/string free. Validated: difference→272 tris, minkowski(CGAL)→140
+      tris, byte-exact valid binary STL matching the stock binary's counts.
+      (Harmless localization warning when resource path unset — translations only.)
 - [ ] **Phase 3 — Swift package.** SwiftPM package wrapping the C ABI with an
       idiomatic Swift API (`Geometry`, `throws`, `Data` STL export). Builds with
       `swift build` on Linux and opens in Xcode.

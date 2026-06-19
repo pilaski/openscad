@@ -1577,6 +1577,19 @@ endif()
 
 target_sources(OpenSCADLibInternal PUBLIC ${RESOURCE_FILES})
 target_sources(OpenSCADLibInternal PRIVATE ${Sources})
+
+# ---- Swift / C ABI kernel wrapper (headless) -------------------------------
+# A pure-C ABI (src/swift/include/openscad_kernel.h) over the real OpenSCAD
+# geometry kernel, packaged as a static lib for Swift / C consumers. Plus a
+# tiny C harness (scad2stl_c) to validate the ABI without a Swift toolchain.
+add_library(openscad_kernel STATIC src/swift/openscad_kernel.cpp)
+target_include_directories(openscad_kernel PUBLIC src/swift/include)
+target_link_libraries(openscad_kernel PUBLIC OpenSCADLibInternal svg)
+
+add_executable(scad2stl_c src/swift/scad2stl_main.c)
+target_link_libraries(scad2stl_c PRIVATE openscad_kernel)
+# ----------------------------------------------------------------------------
+
 find_program(SHELL_EXE NAMES sh bash $ENV{SHELL})
 add_custom_command(TARGET OpenSCADExe POST_BUILD
     COMMAND "${SHELL_EXE}"

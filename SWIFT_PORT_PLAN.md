@@ -43,12 +43,21 @@ Upstream supports this directly — no source hacks needed to go headless:
       buffer/string free. Validated: difference→272 tris, minkowski(CGAL)→140
       tris, byte-exact valid binary STL matching the stock binary's counts.
       (Harmless localization warning when resource path unset — translations only.)
-- [ ] **Phase 3 — Swift package.** SwiftPM package wrapping the C ABI with an
-      idiomatic Swift API (`Geometry`, `throws`, `Data` STL export). Builds with
-      `swift build` on Linux and opens in Xcode.
-- [ ] **Phase 4 — `Examples/scad2stl` Swift CLI.** SwiftPM executable: reads a
-      `.scad`, writes `.stl`. Validate against the MiniCAD 50-example harness
-      (the real kernel should clear the cases the reimplementation couldn't).
+- [x] **Phase 3 — Swift package.** ✅ DONE 2026-06-19. `swift/` SwiftPM package:
+      `COpenSCADKernel` (Clang module over the C ABI + link recipe),
+      `OpenSCADKernel` (idiomatic facade: `OpenSCAD.render`/`renderFile`,
+      `OpenSCADFormat`, `OpenSCADError`, `Data` output), XCTest suite. Builds with
+      Swift 6.3 on Linux against the prebuilt static libs (linker flags in
+      `Package.swift`, `--start-group` to resolve circular archives;
+      `OPENSCAD_BUILD_DIR` override). All 4 tests pass (incl. minkowski/CGAL +
+      clean parse-error throw). Fixed `osk_init(nil)`: must not call
+      `PlatformUtils::applicationPath()` before `registerApplicationPath()`.
+- [x] **Phase 4 — `scad2stl` Swift CLI.** ✅ DONE 2026-06-19. Executable product
+      in the package (`Sources/scad2stl`): `scad2stl <in.scad> <out> [--fn N]
+      [--ascii]`, format inferred from extension. Output **byte-identical** to the
+      C harness and the stock `openscad` binary (272-tri difference, 140-tri
+      minkowski). Build/run docs in `swift/README.md`. *TODO (next): run against
+      the MiniCAD 50-example harness to quantify coverage vs the old reimpl.*
 - [ ] **Phase 5 — Apple/iOS.** CMake iOS-toolchain build → `.xcframework`;
       consumed by the same Swift package via a binary target. (CGAL needs
       GMP/MPFR cross-compiled for iOS — heavier; done on the Mac.) Turnkey

@@ -1,0 +1,4 @@
+module COpenSCADKernel {
+    header "openscad_kernel.h"
+    export *
+}

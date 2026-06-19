@@ -127,7 +127,9 @@ extern "C" {
 void osk_init(const char *application_path)
 {
   std::call_once(g_init_flag, [application_path] {
-    std::string appPath = application_path ? std::string(application_path) : PlatformUtils::applicationPath();
+    // Note: do NOT call PlatformUtils::applicationPath() here — it is only valid
+    // after registerApplicationPath(). Fall back to the current directory.
+    std::string appPath = application_path ? std::string(application_path) : std::string();
     if (appPath.empty()) appPath = fs::current_path().string();
     PlatformUtils::registerApplicationPath(appPath);
     Builtins::initialize();

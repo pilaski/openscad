@@ -1,0 +1,116 @@
+import COpenSCADKernel
+import Foundation
+
+/// Output mesh/format produced by the OpenSCAD kernel.
+public enum OpenSCADFormat {
+    case binarySTL
+    case asciiSTL
+    case off
+    case obj
+    case threeMF
+
+    var raw: OSKFormat {
+        switch self {
+        case .binarySTL: return OSK_FORMAT_BINSTL
+        case .asciiSTL:  return OSK_FORMAT_ASCIISTL
+        case .off:       return OSK_FORMAT_OFF
+        case .obj:       return OSK_FORMAT_OBJ
+        case .threeMF:   return OSK_FORMAT_3MF
+        }
+    }
+
+    /// File extension inferred for `renderFile` when no explicit format is given.
+    var fileExtension: String {
+        switch self {
+        case .binarySTL, .asciiSTL: return "stl"
+        case .off:     return "off"
+        case .obj:     return "obj"
+        case .threeMF: return "3mf"
+        }
+    }
+}
+
+/// An error surfaced by the OpenSCAD kernel (parse failure, evaluation error, …).
+public struct OpenSCADError: Error, CustomStringConvertible {
+    public let code: Int32
+    public let message: String
+    public var description: String { "OpenSCADError(\(code)): \(message)" }
+}
+
+/// Swift facade over the real OpenSCAD geometry kernel (headless).
+///
+/// Wraps the pure-C ABI in `openscad_kernel.h`. The kernel uses global parser
+/// state, so renders are serialized internally.
+public enum OpenSCAD {
+    private static let lock = NSLock()
+    private static var didInit = false
+
+    /// Initialize the kernel once (builtins, parser, fonts). Idempotent.
+    public static func initialize(applicationPath: String? = nil) {
+        lock.lock(); defer { lock.unlock() }
+        guard !didInit else { return }
+        if let p = applicationPath {
+            p.withCString { osk_init($0) }
+        } else {
+            osk_init(nil)
+        }
+        didInit = true
+    }
+
+    /// A short identifier for the active backend/version.
+    public static var backend: String {
+        String(cString: osk_backend())
+    }
+
+    /// Render OpenSCAD source to encoded bytes in memory.
+    /// - Parameters:
+    ///   - source: OpenSCAD program text.
+    ///   - format: desired output format (default binary STL).
+    ///   - fn: if > 0, forces `$fn` for the whole model.
+    public static func render(source: String,
+                              format: OpenSCADFormat = .binarySTL,
+                              fn: Double = 0) throws -> Data {
+        initialize()
+        lock.lock(); defer { lock.unlock() }
+
+        var buffer: UnsafeMutablePointer<UInt8>? = nil
+        var length: Int = 0
+        var errPtr: UnsafeMutablePointer<CChar>? = nil
+
+        let rc = source.withCString { src in
+            osk_render_string(src, format.raw, nil, fn, &buffer, &length, &errPtr)
+        }
+        if rc != 0 {
+            let msg = errPtr.map { String(cString: $0) } ?? "render failed"
+            osk_string_free(errPtr)
+            throw OpenSCADError(code: rc, message: msg)
+        }
+        defer { osk_buffer_free(buffer) }
+        guard let buffer else { return Data() }
+        return Data(bytes: buffer, count: length)
+    }
+
+    /// Render an OpenSCAD source file to an output file. Format is inferred from
+    /// the output extension unless `format` is supplied.
+    public static func renderFile(input: String,
+                                  output: String,
+                                  format: OpenSCADFormat? = nil,
+                                  fn: Double = 0) throws {
+        initialize()
+        lock.lock(); defer { lock.unlock() }
+
+        var errPtr: UnsafeMutablePointer<CChar>? = nil
+        let fmtArg: Int32 = format.map { Int32($0.raw.rawValue) } ?? -1
+
+        let rc = input.withCString { inP in
+            output.withCString { outP in
+                osk_render_file(inP, outP, fmtArg, fn, &errPtr)
+            }
+        }
+        if rc != 0 {
+            let msg = errPtr.map { String(cString: $0) } ?? "render failed"
+            osk_string_free(errPtr)
+            throw OpenSCADError(code: rc, message: msg)
+        }
+    }
+}

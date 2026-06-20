@@ -18,8 +18,13 @@
 #include "core/EvaluationSession.h"
 #include "geometry/Geometry.h"
 #include "geometry/GeometryEvaluator.h"
+#include "geometry/GeometryUtils.h"
 #include "geometry/PolySet.h"
+#include "geometry/PolySetUtils.h"
+#include "geometry/linalg.h"
 #include "io/export.h"
+
+#include <vector>
 
 #include <cstdlib>
 #include <cstring>
@@ -49,10 +54,11 @@ void set_error(char **error_out, const std::string& msg)
   if (error_out) *error_out = dup_cstr(msg.empty() ? "render failed" : msg);
 }
 
-// Core pipeline: scad text -> geometry -> encoded bytes on `out`.
-int render_to_stream(const std::string& text_in, const std::string& filename,
-                     double fn_override, OSKFormat format, std::ostream& out,
-                     std::string& err)
+// Shared front half of the pipeline: scad text -> evaluated geometry.
+// Never returns null on success (an empty model yields an empty PolySet).
+int evaluate_to_geometry(const std::string& text_in, const std::string& filename,
+                         double fn_override, std::shared_ptr<const Geometry>& root_geom,
+                         std::string& err)
 {
   std::string text;
   if (fn_override > 0) {
@@ -99,8 +105,19 @@ int render_to_stream(const std::string& text_in, const std::string& filename,
   Tree tree(root_node, fparent.string());
   GeometryEvaluator geomevaluator(tree);
   constexpr bool allownef = true;
-  std::shared_ptr<const Geometry> root_geom = geomevaluator.evaluateGeometry(*tree.root(), allownef);
+  root_geom = geomevaluator.evaluateGeometry(*tree.root(), allownef);
   if (!root_geom) root_geom = std::make_shared<PolySet>(3);
+  return 0;
+}
+
+// Core pipeline: scad text -> geometry -> encoded bytes on `out`.
+int render_to_stream(const std::string& text_in, const std::string& filename,
+                     double fn_override, OSKFormat format, std::ostream& out,
+                     std::string& err)
+{
+  std::shared_ptr<const Geometry> root_geom;
+  int rc = evaluate_to_geometry(text_in, filename, fn_override, root_geom, err);
+  if (rc != 0) return rc;
 
   switch (format) {
     case OSK_FORMAT_BINSTL:   export_stl(root_geom, out, true);  break;
@@ -117,6 +134,94 @@ int render_to_stream(const std::string& text_in, const std::string& filename,
       err = "unsupported output format";
       return 1;
   }
+  return 0;
+}
+
+// Convert evaluated geometry into an indexed triangle mesh in the C ABI struct.
+// On any failure the caller-supplied buffers are left null and `mesh` is zeroed.
+int geometry_to_mesh(const std::shared_ptr<const Geometry>& geom, bool with_normals,
+                     OSKMesh& mesh, std::string& err)
+{
+  mesh = OSKMesh{};
+
+  std::shared_ptr<const PolySet> ps = PolySetUtils::getGeometryAsPolySet(geom);
+  if (!ps || ps->vertices.empty()) return 0;  // empty model -> empty mesh
+
+  std::unique_ptr<PolySet> tri = PolySetUtils::tessellate_faces(*ps);
+  const PolySet& t = tri ? *tri : *ps;
+
+  const size_t vcount = t.vertices.size();
+
+  // Count emitted triangles (faces are triangles after tessellation; fan-split
+  // defensively in case any non-triangular face slips through).
+  size_t tcount = 0;
+  for (const auto& f : t.indices) {
+    if (f.size() >= 3) tcount += f.size() - 2;
+  }
+  if (vcount == 0 || tcount == 0) return 0;
+
+  auto *positions = static_cast<float *>(std::malloc(sizeof(float) * 3 * vcount));
+  auto *indices = static_cast<uint32_t *>(std::malloc(sizeof(uint32_t) * 3 * tcount));
+  float *normals = with_normals
+                     ? static_cast<float *>(std::malloc(sizeof(float) * 3 * vcount))
+                     : nullptr;
+  if (!positions || !indices || (with_normals && !normals)) {
+    std::free(positions);
+    std::free(indices);
+    std::free(normals);
+    err = "out of memory building mesh";
+    return 3;
+  }
+
+  for (size_t i = 0; i < vcount; ++i) {
+    const Vector3d& v = t.vertices[i];
+    positions[3 * i + 0] = static_cast<float>(v.x());
+    positions[3 * i + 1] = static_cast<float>(v.y());
+    positions[3 * i + 2] = static_cast<float>(v.z());
+  }
+
+  std::vector<Vector3d> accum;
+  if (with_normals) accum.assign(vcount, Vector3d::Zero());
+
+  size_t ti = 0;
+  for (const auto& f : t.indices) {
+    if (f.size() < 3) continue;
+    // Triangle fan around the first vertex of the face.
+    for (size_t k = 1; k + 1 < f.size(); ++k) {
+      const uint32_t a = static_cast<uint32_t>(f[0]);
+      const uint32_t b = static_cast<uint32_t>(f[k]);
+      const uint32_t c = static_cast<uint32_t>(f[k + 1]);
+      indices[3 * ti + 0] = a;
+      indices[3 * ti + 1] = b;
+      indices[3 * ti + 2] = c;
+      ++ti;
+      if (with_normals) {
+        // Unnormalized cross product == 2*area*normal, giving area weighting.
+        const Vector3d n =
+          (t.vertices[b] - t.vertices[a]).cross(t.vertices[c] - t.vertices[a]);
+        accum[a] += n;
+        accum[b] += n;
+        accum[c] += n;
+      }
+    }
+  }
+
+  if (with_normals) {
+    for (size_t i = 0; i < vcount; ++i) {
+      Vector3d n = accum[i];
+      const double len = n.norm();
+      if (len > 1e-12) n /= len; else n = Vector3d(0, 0, 1);
+      normals[3 * i + 0] = static_cast<float>(n.x());
+      normals[3 * i + 1] = static_cast<float>(n.y());
+      normals[3 * i + 2] = static_cast<float>(n.z());
+    }
+  }
+
+  mesh.positions = positions;
+  mesh.normals = normals;
+  mesh.indices = indices;
+  mesh.vertex_count = vcount;
+  mesh.triangle_count = ti;
   return 0;
 }
 
@@ -182,6 +287,50 @@ int osk_render_string(const char *scad_source, OSKFormat format,
   *out_buffer = buf;
   *out_len = data.size();
   return 0;
+}
+
+int osk_render_mesh(const char *scad_source, const char *search_path,
+                    double fn_override, int with_normals,
+                    OSKMesh *out_mesh, char **error_out)
+{
+  (void)search_path;  // reserved for use/include resolution; <string> uses CWD for now
+  if (!scad_source || !out_mesh) {
+    set_error(error_out, "null argument");
+    return 2;
+  }
+  *out_mesh = OSKMesh{};
+
+  std::lock_guard<std::mutex> lock(g_render_mutex);
+  osk_init(nullptr);
+
+  std::string err;
+  int rc;
+  try {
+    std::shared_ptr<const Geometry> root_geom;
+    rc = evaluate_to_geometry(scad_source, "<string>.scad", fn_override, root_geom, err);
+    if (rc == 0) rc = geometry_to_mesh(root_geom, with_normals != 0, *out_mesh, err);
+  } catch (const std::exception& e) {
+    err = std::string("exception: ") + e.what();
+    rc = 1;
+  } catch (...) {
+    err = "unknown exception during render";
+    rc = 1;
+  }
+  if (rc != 0) {
+    osk_mesh_free(out_mesh);
+    set_error(error_out, err);
+    return rc;
+  }
+  return 0;
+}
+
+void osk_mesh_free(OSKMesh *mesh)
+{
+  if (!mesh) return;
+  std::free(mesh->positions);
+  std::free(mesh->normals);
+  std::free(mesh->indices);
+  *mesh = OSKMesh{};
 }
 
 int osk_render_file(const char *input_path, const char *output_path, int format,

@@ -30,6 +30,21 @@ public enum OpenSCADFormat {
     }
 }
 
+/// An indexed triangle mesh, ready to feed a 3D view (SceneKit / RealityKit /
+/// Metal) with no file round-trip. Buffers use a flat, GPU-friendly layout.
+public struct Mesh {
+    /// Vertex positions, 3 floats (x, y, z) per vertex.
+    public let positions: [Float]
+    /// Per-vertex unit normals, 3 floats per vertex; `nil` if not requested.
+    public let normals: [Float]?
+    /// Triangle list: 3 indices into the vertex arrays per triangle.
+    public let indices: [UInt32]
+
+    public var vertexCount: Int { positions.count / 3 }
+    public var triangleCount: Int { indices.count / 3 }
+    public var isEmpty: Bool { indices.isEmpty }
+}
+
 /// An error surfaced by the OpenSCAD kernel (parse failure, evaluation error, …).
 public struct OpenSCADError: Error, CustomStringConvertible {
     public let code: Int32
@@ -88,6 +103,48 @@ public enum OpenSCAD {
         defer { osk_buffer_free(buffer) }
         guard let buffer else { return Data() }
         return Data(bytes: buffer, count: length)
+    }
+
+    /// Render OpenSCAD source straight to an in-memory triangle mesh — the path
+    /// to use for an interactive 3D view (no STL round-trip).
+    /// - Parameters:
+    ///   - source: OpenSCAD program text.
+    ///   - fn: if > 0, forces `$fn` for the whole model; lower it for a fast
+    ///         low-resolution preview.
+    ///   - normals: compute per-vertex smooth normals (default true).
+    public static func renderMesh(source: String,
+                                  fn: Double = 0,
+                                  normals: Bool = true) throws -> Mesh {
+        initialize()
+        lock.lock(); defer { lock.unlock() }
+
+        var mesh = OSKMesh()
+        var errPtr: UnsafeMutablePointer<CChar>? = nil
+
+        let rc = source.withCString { src in
+            osk_render_mesh(src, nil, fn, normals ? 1 : 0, &mesh, &errPtr)
+        }
+        if rc != 0 {
+            let msg = errPtr.map { String(cString: $0) } ?? "render failed"
+            osk_string_free(errPtr)
+            throw OpenSCADError(code: rc, message: msg)
+        }
+        defer { osk_mesh_free(&mesh) }
+
+        let vcount = mesh.vertex_count
+        let tcount = mesh.triangle_count
+
+        let positions: [Float] = (vcount > 0 && mesh.positions != nil)
+            ? Array(UnsafeBufferPointer(start: mesh.positions, count: vcount * 3))
+            : []
+        let normalArray: [Float]? = (vcount > 0 && mesh.normals != nil)
+            ? Array(UnsafeBufferPointer(start: mesh.normals, count: vcount * 3))
+            : nil
+        let indices: [UInt32] = (tcount > 0 && mesh.indices != nil)
+            ? Array(UnsafeBufferPointer(start: mesh.indices, count: tcount * 3))
+            : []
+
+        return Mesh(positions: positions, normals: normalArray, indices: indices)
     }
 
     /// Render an OpenSCAD source file to an output file. Format is inferred from

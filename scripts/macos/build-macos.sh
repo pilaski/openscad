@@ -13,6 +13,12 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="$REPO_ROOT/build-macos"
 JOBS="${1:-$(sysctl -n hw.ncpu)}"
 
+echo "==> Initializing required submodules (manifold, Clipper2)"
+# USE_BUILTIN_MANIFOLD/USE_BUILTIN_CLIPPER2 below build these from source, so
+# they must be checked out. Safe to re-run; no-op if already present.
+git -C "$REPO_ROOT" submodule update --init --recursive \
+  submodules/manifold submodules/Clipper2
+
 echo "==> Checking Homebrew dependencies"
 if ! command -v brew >/dev/null 2>&1; then
   echo "Homebrew is required: https://brew.sh" >&2

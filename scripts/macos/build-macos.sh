@@ -26,11 +26,19 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 # Full headless OpenSCAD dep set (CGAL + Manifold). Qt/OpenGL omitted (NULLGL).
+#
+# NOTE: lib3mf is intentionally omitted. It is NOT in core Homebrew (no
+# `brew install lib3mf`); upstream OpenSCAD pulls it from a custom tap that has
+# been unreliable on macOS since Oct 2025 (openscad/openscad#6250). It only
+# powers 3MF import/export, which scad2stl / the mesh path do not need, so we
+# build against OpenSCAD's dummy 3MF stubs via CMAKE_REQUIRE_FIND_PACKAGE_Lib3MF=OFF
+# below. STL/OFF/OBJ export and all geometry are unaffected. If you later want
+# 3MF, install it from OpenSCAD's tap and drop the require=OFF flag.
 BREW_DEPS=(
   cmake ninja pkg-config flex bison
   cgal gmp mpfr boost eigen
   harfbuzz freetype fontconfig glib double-conversion
-  libzip libxml2 cairo lib3mf tbb
+  libzip libxml2 cairo tbb
 )
 echo "==> brew install ${BREW_DEPS[*]}"
 brew install "${BREW_DEPS[@]}"
@@ -45,6 +53,7 @@ cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
   -DHEADLESS=ON -DNULLGL=ON \
   -DENABLE_CGAL=ON -DENABLE_MANIFOLD=ON \
   -DUSE_BUILTIN_MANIFOLD=ON -DUSE_BUILTIN_CLIPPER2=ON \
+  -DCMAKE_REQUIRE_FIND_PACKAGE_Lib3MF=OFF \
   -DENABLE_PYTHON=OFF -DUSE_MIMALLOC=OFF -DENABLE_TESTS=OFF \
   -DEXPERIMENTAL=OFF
 

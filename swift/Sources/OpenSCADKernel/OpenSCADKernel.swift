@@ -32,7 +32,7 @@ public enum OpenSCADFormat {
 
 /// An indexed triangle mesh, ready to feed a 3D view (SceneKit / RealityKit /
 /// Metal) with no file round-trip. Buffers use a flat, GPU-friendly layout.
-public struct Mesh {
+public struct Mesh: Sendable {
     /// Vertex positions, 3 floats (x, y, z) per vertex.
     public let positions: [Float]
     /// Per-vertex unit normals, 3 floats per vertex; `nil` if not requested.

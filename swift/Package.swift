@@ -46,8 +46,13 @@ kernelLinkFlags += ["-lstdc++", "-lm"]
 
 let package = Package(
     name: "OpenSCADKernel",
+    platforms: [
+        .macOS(.v11), .iOS(.v14), .tvOS(.v14),
+    ],
     products: [
         .library(name: "OpenSCADKernel", targets: ["OpenSCADKernel"]),
+        // SwiftUI/SceneKit views (Apple platforms; empty module elsewhere).
+        .library(name: "OpenSCADKernelUI", targets: ["OpenSCADKernelUI"]),
         .executable(name: "scad2stl", targets: ["scad2stl"]),
     ],
     targets: [
@@ -60,6 +65,12 @@ let package = Package(
         .target(
             name: "OpenSCADKernel",
             dependencies: ["COpenSCADKernel"]
+        ),
+        // SwiftUI + SceneKit view layer. Source is gated on canImport(SceneKit),
+        // so this compiles to an empty module on Linux.
+        .target(
+            name: "OpenSCADKernelUI",
+            dependencies: ["OpenSCADKernel"]
         ),
         // Command-line scad -> stl tool.
         .executableTarget(

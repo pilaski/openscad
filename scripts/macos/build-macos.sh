@@ -88,6 +88,15 @@ fi
 # Homebrew keeps flex/bison keg-only; put them first on PATH.
 export PATH="$(brew --prefix flex)/bin:$(brew --prefix bison)/bin:$PATH"
 
+# A build dir configured before lib3mf was force-disabled still has the real
+# 3MF sources compiled in and will fail at link. If the existing cache predates
+# the disable flag, wipe it so we reconfigure cleanly from scratch.
+if [ -f "$BUILD_DIR/CMakeCache.txt" ] \
+   && ! grep -q '^CMAKE_DISABLE_FIND_PACKAGE_Lib3MF:.*=ON' "$BUILD_DIR/CMakeCache.txt"; then
+  echo "==> Stale build dir (configured before 3MF was disabled); removing $BUILD_DIR"
+  rm -rf "$BUILD_DIR"
+fi
+
 echo "==> Configuring (headless, NULLGL, CGAL + Manifold)"
 cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
@@ -96,6 +105,7 @@ cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
   -DENABLE_CGAL=ON -DENABLE_MANIFOLD=ON \
   -DUSE_BUILTIN_MANIFOLD=ON -DUSE_BUILTIN_CLIPPER2=ON \
   -DCMAKE_REQUIRE_FIND_PACKAGE_Lib3MF=OFF \
+  -DCMAKE_DISABLE_FIND_PACKAGE_Lib3MF=ON \
   -DENABLE_PYTHON=OFF -DUSE_MIMALLOC=OFF -DENABLE_TESTS=OFF \
   -DEXPERIMENTAL=OFF
 

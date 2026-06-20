@@ -40,8 +40,50 @@ BREW_DEPS=(
   harfbuzz freetype fontconfig glib double-conversion
   libzip libxml2 cairo tbb
 )
-echo "==> brew install ${BREW_DEPS[*]}"
-brew install "${BREW_DEPS[@]}"
+
+# Which formulae are missing? `brew list --versions` is read-only and works even
+# when the Homebrew prefix is owned by another (admin) account.
+MISSING=()
+for dep in "${BREW_DEPS[@]}"; do
+  if ! brew list --versions "$dep" >/dev/null 2>&1; then
+    MISSING+=("$dep")
+  fi
+done
+
+if [ "${#MISSING[@]}" -eq 0 ]; then
+  echo "==> All ${#BREW_DEPS[@]} dependencies already installed; skipping install."
+else
+  echo "==> Missing formulae: ${MISSING[*]}"
+  # Homebrew refuses to run under sudo and writes into its prefix as the owning
+  # user. If that prefix isn't writable by us (e.g. Homebrew lives under an admin
+  # account), don't even try — print the exact command to run as that user.
+  BREW_PREFIX="$(brew --prefix)"
+  if [ "${SKIP_BREW_INSTALL:-0}" != "1" ] && [ -w "$BREW_PREFIX/Cellar" ] 2>/dev/null; then
+    echo "==> brew install ${MISSING[*]}"
+    brew install "${MISSING[@]}"
+  else
+    cat >&2 <<EOF
+
+ERROR: ${#MISSING[@]} Homebrew formula(e) are missing and this account cannot
+write to the Homebrew prefix ($BREW_PREFIX), so they cannot be installed here.
+
+Install them from the account that OWNS Homebrew (the admin account), e.g.:
+
+    brew install ${MISSING[*]}
+
+If you are in a normal user shell, you can run it as the admin user without
+fully logging out (you'll be prompted for the admin password):
+
+    su - <admin-username> -c 'brew install ${MISSING[*]}'
+
+Do NOT prefix brew with sudo — Homebrew refuses to run as root.
+
+Once the formulae are installed, re-run this script. It will detect them and
+proceed straight to the build (set SKIP_BREW_INSTALL=1 to force-skip the check).
+EOF
+    exit 1
+  fi
+fi
 
 # Homebrew keeps flex/bison keg-only; put them first on PATH.
 export PATH="$(brew --prefix flex)/bin:$(brew --prefix bison)/bin:$PATH"

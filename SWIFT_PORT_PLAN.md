@@ -101,3 +101,30 @@ Manifold + Clipper2 come from in-tree submodules (already checked out).
   vendored iOS toolchain, GMP/MPFR + per-slice + xcframework scripts, `docs/IOS_BUILD.md`.
   All pushed to `pilaski/openscad` (`swift-wrapper`, HEAD `d460f22`).
   **Next decision (IOS_BUILD.md §2): slim iOS core (route A) vs full parity (B).**
+- 2026-06-20: **3D-view mesh path + SwiftUI/SceneKit view layer.** iOS scope
+  decision **RESOLVED → route B (full parity)**; route A dropped. New C ABI
+  `osk_render_mesh()`/`osk_mesh_free()` returns a flat GPU-ready `OSKMesh`
+  (positions/normals/indices) — no STL round-trip for the 3D view; preview =
+  same path at low `$fn` (Manifold booleans are ms-fast), not a separate OpenCSG
+  pipeline. Swift facade `OpenSCAD.renderMesh` → `Mesh`. New `OpenSCADKernelUI`
+  SwiftPM target (gated `#if canImport(SceneKit)`, empty module on Linux):
+  `Mesh.makeSCNGeometry()` (zero-recopy), `makeOpenSCADScene()` (Z-up→Y-up,
+  camera framing, lights), `OpenSCADMeshView`/`OpenSCADSourceView` (orbit/zoom,
+  off-main-thread render). 7/7 swift tests pass. README made canonical entry
+  point. Commits `6df884e49`…`43bcad41b`, pushed.
+- 2026-06-20/21: **macOS build script hardening (Martin running it on his Mac).**
+  Three fixes pushed to `swift-wrapper`: (`33e1bf39d`) dropped `lib3mf` from the
+  brew list — it's not a core formula and OpenSCAD's tap is broken on macOS since
+  Oct 2025 (openscad#6250); (`81068bfbb`) script now *checks* deps with read-only
+  `brew list --versions` and prints an install command + exits cleanly when the
+  Homebrew prefix is admin-owned/read-only, instead of dying — Martin moved brew
+  install rights to a separate admin account; (`f9cce610c`) added
+  `-DCMAKE_DISABLE_FIND_PACKAGE_Lib3MF=ON` (the `REQUIRE=OFF` flag wasn't enough —
+  CMake still found his partial lib3mf, compiled the real `export_3mf`, and the
+  linker failed) + auto-wipes a stale `build-macos/` cache. **Tradeoff: 3MF
+  import/export disabled (built-in dummy stubs); STL/OFF/OBJ + mesh + all geometry
+  unaffected.** 3MF is the one route-B parity gap left open — re-add via OpenSCAD's
+  own tap + drop the disable flag if wanted later (low priority).
+  **HEAD `f9cce610c`, pushed.** Next likely macOS snag: keg-only libxml2 link
+  (fix staged — add `-L$(brew --prefix libxml2)/lib`). **Project paused here at
+  Martin's request to switch to another project.**

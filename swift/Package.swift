@@ -22,8 +22,11 @@ let kernelArchives = [
 let kernelSystemLibs = [
     "-lboost_regex", "-lboost_program_options", "-lboost_container",
     "-lharfbuzz", "-lfontconfig", "-lglib-2.0", "-ldouble-conversion",
-    "-lgmpxx", "-lmpfr", "-lgmp", "-lzip", "-lcairo", "-l3MF", "-lfreetype",
+    "-lgmpxx", "-lmpfr", "-lgmp", "-lzip", "-lcairo", "-lfreetype",
     "-ltbb", "-lxml2",
+    // NOTE: -l3MF is platform-conditional below. The Linux host builds the
+    // kernel against real lib3mf; macOS uses OpenSCAD's dummy 3MF stubs (lib3mf
+    // is not in core Homebrew), so there is no lib3MF to link there.
 ]
 
 #if os(macOS)
@@ -41,6 +44,7 @@ var kernelLinkFlags: [String] = ["-L\(buildDir)", "-Xlinker", "--start-group"]
 for a in kernelArchives { kernelLinkFlags += ["-Xlinker", a] }
 kernelLinkFlags += ["-Xlinker", "--end-group"]
 kernelLinkFlags += kernelSystemLibs
+kernelLinkFlags += ["-l3MF"]   // Linux kernel links real lib3mf (apt)
 kernelLinkFlags += ["-lstdc++", "-lm"]
 #endif
 

@@ -5,8 +5,19 @@ import PackageDescription
 // (libopenscad_kernel.a + libopenscadinternal.a + svg/manifold/Clipper2).
 // Override with OPENSCAD_BUILD_DIR when building elsewhere.
 import Foundation
-let buildDir = ProcessInfo.processInfo.environment["OPENSCAD_BUILD_DIR"]
-    ?? "/home/claire/.openclaw/workspace/repos/openscad/build"
+
+// Default build dir resolves relative to this manifest so a bare `swift build`
+// works without OPENSCAD_BUILD_DIR: <repo>/build-macos on macOS, <repo>/build
+// on Linux. Override with OPENSCAD_BUILD_DIR to point elsewhere.
+let repoRoot = URL(fileURLWithPath: #filePath)   // <repo>/swift/Package.swift
+    .deletingLastPathComponent()                  // <repo>/swift
+    .deletingLastPathComponent()                  // <repo>
+#if os(macOS)
+let defaultBuildDir = repoRoot.appendingPathComponent("build-macos").path
+#else
+let defaultBuildDir = repoRoot.appendingPathComponent("build").path
+#endif
+let buildDir = ProcessInfo.processInfo.environment["OPENSCAD_BUILD_DIR"] ?? defaultBuildDir
 
 // The prebuilt OpenSCAD static archives (built by CMake), in dependency order.
 let kernelArchives = [
@@ -34,9 +45,14 @@ let kernelSystemLibs = [
 // System deps come from Homebrew; C++ runtime is libc++.
 let brewPrefix = ProcessInfo.processInfo.environment["HOMEBREW_PREFIX"]
     ?? "/opt/homebrew"   // Apple-silicon default; Intel brew is /usr/local
-var kernelLinkFlags: [String] = ["-L\(buildDir)", "-L\(brewPrefix)/lib"]
+// gettext is keg-only on Homebrew; -lintl lives under opt/gettext, not lib.
+// (Linux glibc bundles libintl, so it only needs linking on macOS.)
+var kernelLinkFlags: [String] = [
+    "-L\(buildDir)", "-L\(brewPrefix)/lib", "-L\(brewPrefix)/opt/gettext/lib",
+]
 kernelLinkFlags += kernelArchives
 kernelLinkFlags += kernelSystemLibs
+kernelLinkFlags += ["-lintl"]
 kernelLinkFlags += ["-lc++"]
 #else
 // Linux: GNU ld; wrap archives in --start-group to resolve circular refs.

@@ -128,3 +128,26 @@ Manifold + Clipper2 come from in-tree submodules (already checked out).
   **HEAD `f9cce610c`, pushed.** Next likely macOS snag: keg-only libxml2 link
   (fix staged — add `-L$(brew --prefix libxml2)/lib`). **Project paused here at
   Martin's request to switch to another project.**
+- 2026-06-21 (evening): **macOS Swift-link debugging — Martin building on his
+  MacBook Pro.** Resumed from pause. Chased the linker errors past the CMake/3MF
+  fixes into the SwiftPM link step (`swift/Package.swift`). Three issues, three
+  fixes, all pushed to `swift-wrapper`:
+    1. (`bd6a26f55`) **`-l3MF` was hardcoded in the *shared* linker list** — so
+       SwiftPM tried to link lib3MF on both platforms. Linux has it (apt) so it
+       slid through; the Mac built the kernel with the dummy 3MF stubs (no
+       `lib3MF` exists) → `ld: library '3MF' not found`. Moved the flag into the
+       **Linux-only** branch; Linux build still links.
+    2. (`41d4b3a45`) **`_libintl_setlocale` / `_libintl_textdomain` undefined** —
+       glibc bundles libintl into libc, macOS keeps it separate (keg-only
+       Homebrew `gettext`). Added **`-lintl`** on macOS.
+    3. (`41d4b3a45`, same commit) **Default build dir now auto-resolves from the
+       manifest location** so a bare `swift build` finds `build-macos/` without
+       the user setting `OPENSCAD_BUILD_DIR` (his last error showed it falling
+       back to the hardcoded Linux `repos/openscad/build/` paths — those `.a`s
+       don't exist on his Mac).
+  **HEAD now `41d4b3a45`, pushed to `pilaski/swift-wrapper`.** Prereq for fix 2:
+  Homebrew `gettext` present (glib depends on it, so almost certainly is). **Next
+  expected snag: more macOS-vs-glibc libc gaps** — if the next error is another
+  `symbol(s) not found`, it's the same class of fix (find which separate macOS lib
+  provides the symbol, add `-l<lib>` on macOS). Structural problems are behind us;
+  this is platform-libc cleanup. Awaiting Martin's next linker output.
